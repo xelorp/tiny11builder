@@ -16,12 +16,12 @@ Write-Output "Scratch disk set to $ScratchDisk"
 
 # Check if PowerShell execution is restricted
 if ((Get-ExecutionPolicy) -eq 'Restricted') {
-    Write-Host "Your current PowerShell Execution Policy is set to Restricted, which prevents scripts from running. Do you want to change it to RemoteSigned? (yes/no)"
+    Write-Host "Your current PowerShell Execution Policy is set to Restricted, which prevents scripts from running. Do you want to change it to RemoteSigned? (y/n)"
     $response = Read-Host
-    if ($response -eq 'yes') {
+    if ($response -eq 'y') {
         Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Confirm:$false
     } else {
-        Write-Host "The script cannot be run without changing the execution policy. Exiting..."
+        Write-Host "The script can't be run without changing the execution policy. Exiting..."
         exit
     }
 }
@@ -32,8 +32,7 @@ $adminGroup = $adminSID.Translate([System.Security.Principal.NTAccount])
 $myWindowsID=[System.Security.Principal.WindowsIdentity]::GetCurrent()
 $myWindowsPrincipal=new-object System.Security.Principal.WindowsPrincipal($myWindowsID)
 $adminRole=[System.Security.Principal.WindowsBuiltInRole]::Administrator
-if (!$myWindowsPrincipal.IsInRole($adminRole))
-{
+if (!$myWindowsPrincipal.IsInRole($adminRole)) {
     Write-Host "Restarting Tiny11 Builder as admin in a new window, you can close this one."
     $newProcess = new-object System.Diagnostics.ProcessStartInfo "PowerShell";
     $newProcess.Arguments = $myInvocation.MyCommand.Definition;
@@ -43,53 +42,49 @@ if (!$myWindowsPrincipal.IsInRole($adminRole))
 }
 
 # Start the transcript and prepare the window
-Start-Transcript -Path "$ScratchDisk\tiny11.log"
-
+Start-Transcript -Path "$PSScriptRoot\tiny11.log"
 $Host.UI.RawUI.WindowTitle = "Tiny11 Builder"
 Clear-Host
-Write-Host "Welcome to the Tiny11 Builder! Release: 12/07/24"
+Write-Host "Welcome to the Tiny11 Builder! Release: 09/12/24"
 
 $hostArchitecture = $Env:PROCESSOR_ARCHITECTURE
+
 New-Item -ItemType Directory -Force -Path "$ScratchDisk\tiny11\sources" | Out-Null
+
 do {
-    $DriveLetter = Read-Host "Please enter the drive letter for the Windows 11 image"
+    $DriveLetter = Read-Host "Please enter the drive letter for the mounted Windows 11 image"
     if ($DriveLetter -match '^[c-zC-Z]$') {
         $DriveLetter = $DriveLetter + ":"
         Write-Output "Drive letter set to $DriveLetter"
     } else {
-        Write-Output "Invalid drive letter. Please enter a letter between C and Z."
+        Write-Output "Please enter a letter between C and Z."
     }
 } while ($DriveLetter -notmatch '^[c-zC-Z]:$')
 
 if ((Test-Path "$DriveLetter\sources\boot.wim") -eq $false -or (Test-Path "$DriveLetter\sources\install.wim") -eq $false) {
     if ((Test-Path "$DriveLetter\sources\install.esd") -eq $true) {
-        Write-Host "Found install.esd, converting to install.wim..."
+        Write-Host "Found install.esd, converting to .wim"
         Get-WindowsImage -ImagePath $DriveLetter\sources\install.esd
         $index = Read-Host "Please enter the image index"
         Write-Host ' '
-        Write-Host 'Converting install.esd to install.wim. This may take a while...'
+        Write-Host 'Proceeding with the conversion. This may take a while...'
         Export-WindowsImage -SourceImagePath $DriveLetter\sources\install.esd -SourceIndex $index -DestinationImagePath $ScratchDisk\tiny11\sources\install.wim -Compressiontype Maximum -CheckIntegrity
     } else {
-        Write-Host "Can't find Windows OS Installation files in the specified Drive Letter.."
-        Write-Host "Please enter the correct DVD Drive Letter.."
+        Write-Host "Can't find Windows installation files in the specified drive letter! Please enter the correct drive letter. Exiting..."
         exit
     }
 }
 
-Write-Host "Copying Windows image..."
+Write-Host "Copying image"
 Copy-Item -Path "$DriveLetter\*" -Destination "$ScratchDisk\tiny11" -Recurse -Force | Out-Null
-Set-ItemProperty -Path "$ScratchDisk\tiny11\sources\install.esd" -Name IsReadOnly -Value $false > $null 2>&1
-Remove-Item "$ScratchDisk\tiny11\sources\install.esd" > $null 2>&1
-Write-Host "Copy complete!"
-Start-Sleep -Seconds 2
-Clear-Host
+Set-ItemProperty -Path "$ScratchDisk\tiny11\sources\install.esd" -Name IsReadOnly -Value $false
+Remove-Item "$ScratchDisk\tiny11\sources\install.esd" | Out-Null
 
-Write-Host "Getting image information:"
+Write-Host "Getting image information"
 Get-WindowsImage -ImagePath $ScratchDisk\tiny11\sources\install.wim
-
 $index = Read-Host "Please enter the image index"
 
-Write-Host "Mounting Windows image. This may take a while."
+Write-Host "Mounting Windows image. This may take a while..."
 $wimFilePath = "$ScratchDisk\tiny11\sources\install.wim"
 & takeown "/F" $wimFilePath 
 & icacls $wimFilePath "/grant" "$($adminGroup.Value):(F)"
@@ -98,10 +93,10 @@ try {
 } catch {
     # This block will catch the error and suppress it.
 }
-New-Item -ItemType Directory -Force -Path "$ScratchDisk\scratchdir" > $null
+New-Item -ItemType Directory -Force -Path "$ScratchDisk\scratchdir" | Out-Null
 Mount-WindowsImage -ImagePath $ScratchDisk\tiny11\sources\install.wim -Index $index -Path $ScratchDisk\scratchdir
 
-$imageIntl = & dism /English /Get-Intl "/Image:$($ScratchDisk)\scratchdir"
+$imageIntl = & 'dism' '/English' '/Get-Intl' "/Image:$($ScratchDisk)\scratchdir"
 $languageLine = $imageIntl -split '\n' | Where-Object { $_ -match 'Default system UI language : ([a-zA-Z]{2}-[a-zA-Z]{2})' }
 
 if ($languageLine) {
@@ -130,7 +125,8 @@ if (-not $architecture) {
     Write-Host "Architecture information not found."
 }
 
-Write-Host "Mounting complete! Performing removal of applications..."
+Write-Host "Mounting complete! Performing removal of applications."
+Clear-Host
 
 $packages = & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Get-ProvisionedAppxPackages' |
     ForEach-Object {
@@ -144,13 +140,13 @@ $packagesToRemove = $packages | Where-Object {
     $packageName = $_
     $packagePrefixes -contains ($packagePrefixes | Where-Object { $packageName -like "$_*" })
 }
+
 foreach ($package in $packagesToRemove) {
     write-host "Removing $package :"
     & 'dism' '/English' "/image:$($ScratchDisk)\scratchdir" '/Remove-ProvisionedAppxPackage' "/PackageName:$package"
 }
 
-Write-Host "Removing of system apps complete! Now proceeding to removal of system packages..."
-Start-Sleep -Seconds 1
+Write-Host "Removing of system apps complete! Now proceeding to removal of system packages."
 Clear-Host
 
 $packagePatterns = @(
@@ -167,7 +163,7 @@ $packagePatterns = @(
 )
 
 # Get all packages
-$allPackages = & dism "/image:$($ScratchDisk)\scratchdir" /Get-Packages /Format:Table
+$allPackages = & 'dism' "/image:$($ScratchDisk)\scratchdir" /Get-Packages /Format:Table
 $allPackages = $allPackages -split "`n" | Select-Object -Skip 1
 
 foreach ($packagePattern in $packagePatterns) {
@@ -179,11 +175,11 @@ foreach ($packagePattern in $packagePatterns) {
         $packageIdentity = ($package -split "\s+")[0]
 
         Write-Host "Removing $packageIdentity..."
-        & dism "/image:$($ScratchDisk)\scratchdir" /Remove-Package /PackageName:$packageIdentity 
+        & 'dism' "/image:$($ScratchDisk)\scratchdir" /Remove-Package /PackageName:$packageIdentity 
     }
 }
 
-Write-Host "Removing Edge:"
+Write-Host "Removing Edge"
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\Edge" -Recurse -Force | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\EdgeUpdate" -Recurse -Force | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Program Files (x86)\Microsoft\EdgeCore" -Recurse -Force | Out-Null
@@ -216,13 +212,12 @@ if ($architecture -eq 'amd64') {
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\Microsoft-Edge-Webview" -Recurse -Force | Out-Null
 
-Write-Host "Removing OneDrive:"
+Write-Host "Removing OneDrive"
 & 'takeown' '/f' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" | Out-Null
 & 'icacls' "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" '/grant' "$($adminGroup.Value):(F)" '/T' '/C' | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir\Windows\System32\OneDriveSetup.exe" -Force | Out-Null
 
 Write-Host "Removal complete!"
-Start-Sleep -Seconds 2
 Clear-Host
 
 Write-Host "Loading registry..."
@@ -231,7 +226,7 @@ reg load HKLM\zNTUSER $ScratchDisk\scratchdir\Users\Default\ntuser.dat | Out-Nul
 reg load HKLM\zSOFTWARE $ScratchDisk\scratchdir\Windows\System32\config\SOFTWARE | Out-Null
 reg load HKLM\zSYSTEM $ScratchDisk\scratchdir\Windows\System32\config\SYSTEM | Out-Null
 
-Write-Host "Bypassing system requirements(on the system image):"
+Write-Host "Bypassing system requirements (on the system image)"
 & 'reg' 'add' 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' '/v' 'SV1' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' '/v' 'SV2' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\Control Panel\UnsupportedHardwareNotificationCache' '/v' 'SV1' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
@@ -243,7 +238,7 @@ Write-Host "Bypassing system requirements(on the system image):"
 & 'reg' 'add' 'HKLM\zSYSTEM\Setup\LabConfig' '/v' 'BypassTPMCheck' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zSYSTEM\Setup\MoSetup' '/v' 'AllowUpgradesWithUnsupportedTPMOrCPU' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 
-Write-Host "Disabling Sponsored Apps:"
+Write-Host "Disabling Sponsored Apps"
 & 'reg' 'add' 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' '/v' 'OemPreInstalledAppsEnabled' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' '/v' 'PreInstalledAppsEnabled' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' '/v' 'SilentInstalledAppsEnabled' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
@@ -274,28 +269,28 @@ Write-Host "Disabling Sponsored Apps:"
 & 'reg' 'add' 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' '/v' 'DisableConsumerAccountStateContent' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\CloudContent' '/v' 'DisableCloudOptimizedContent' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 
-Write-Host "Enabling Local Accounts on OOBE:"
+Write-Host "Enabling Local Accounts on OOBE"
 & 'reg' 'add' 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\OOBE' '/v' 'BypassNRO' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\scratchdir\Windows\System32\Sysprep\autounattend.xml" -Force | Out-Null
 
-Write-Host "Disabling Reserved Storage:"
+Write-Host "Disabling Reserved Storage"
 & 'reg' 'add' 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager' '/v' 'ShippedWithReserves' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 
-Write-Host "Disabling BitLocker Device Encryption:"
+Write-Host "Disabling BitLocker Device Encryption"
 & 'reg' 'add' 'HKLM\zSYSTEM\ControlSet001\Control\BitLocker' '/v' 'PreventDeviceEncryption' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 
-Write-Host "Disabling Chat icon:"
+Write-Host "Disabling Chat icon"
 & 'reg' 'add' 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\Windows Chat' '/v' 'ChatIcon' '/t' 'REG_DWORD' '/d' '3' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' '/v' 'TaskbarMn' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 
-Write-Host "Removing Edge related registries:"
+Write-Host "Removing Edge related registries"
 reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge" /f | Out-Null
 reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge Update" /f | Out-Null
 
-Write-Host "Disabling OneDrive folder backup:"
+Write-Host "Disabling OneDrive folder backup"
 & 'reg' 'add' "HKLM\zSOFTWARE\Policies\Microsoft\Windows\OneDrive" '/v' 'DisableFileSyncNGSC' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 
-Write-Host "Disabling Telemetry:"
+Write-Host "Disabling Telemetry"
 & 'reg' 'add' 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' '/v' 'Enabled' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\Software\Microsoft\Windows\CurrentVersion\Privacy' '/v' 'TailoredExperiencesWithDiagnosticDataEnabled' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy' '/v' 'HasAccepted' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
@@ -307,18 +302,18 @@ Write-Host "Disabling Telemetry:"
 & 'reg' 'add' 'HKLM\zSOFTWARE\Policies\Microsoft\Windows\DataCollection' '/v' 'AllowTelemetry' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zSYSTEM\ControlSet001\Services\dmwappushservice' '/v' 'Start' '/t' 'REG_DWORD' '/d' '4' '/f' | Out-Null
 
-Write-Host "Disabling sideloading of DevHome and Outlook:"
+Write-Host "Disabling sideloading of DevHome and Outlook"
 & 'reg' 'add' 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler\OutlookUpdate' '/v' 'workCompleted' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Orchestrator\UScheduler\DevHomeUpdate' '/v' 'workCompleted' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 & 'reg' 'delete' 'HKLM\zSOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\OutlookUpdate' '/f' | Out-Null
 & 'reg' 'delete' 'HKLM\zSOFTWARE\Microsoft\WindowsUpdate\Orchestrator\UScheduler_Oobe\DevHomeUpdate' '/f' | Out-Null
 
-Write-Host "Disabling bing in Start Menu:"
+Write-Host "Disabling bing in Start Menu"
 & 'reg' 'add' 'HKLM\zNTUSER\Software\Policies\Microsoft\Windows\Explorer' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\Software\Policies\Microsoft\Windows\Explorer' '/v' 'ShowRunAsDifferentUserInStart' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\Software\Policies\Microsoft\Windows\Explorer' '/v' 'DisableSearchBoxSuggestions' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 
-## this function allows PowerShell to take ownership of the Scheduled Tasks registry key from TrustedInstaller. Based on Jose Espitia's script.
+# This function allows PowerShell to take ownership of the Scheduled Tasks registry key from TrustedInstaller. Based on Jose Espitia's script.
 function Enable-Privilege {
  param(
   [ValidateSet(
@@ -334,9 +329,9 @@ function Enable-Privilege {
    "SeTakeOwnershipPrivilege", "SeTcbPrivilege", "SeTimeZonePrivilege", "SeTrustedCredManAccessPrivilege",
    "SeUndockPrivilege", "SeUnsolicitedInputPrivilege")]
   $Privilege,
-  ## The process on which to adjust the privilege. Defaults to the current process.
+  # The process on which to adjust the privilege. Defaults to the current process.
   $ProcessId = $pid,
-  ## Switch to disable the privilege, rather than enable it.
+  # Switch to disable the privilege, rather than enable it.
   [Switch] $Disable
  )
  $definition = @'
@@ -408,9 +403,10 @@ $regACL = $regKey.GetAccessControl()
 $regRule = New-Object System.Security.AccessControl.RegistryAccessRule ($adminGroup,"FullControl","ContainerInherit","None","Allow")
 $regACL.SetAccessRule($regRule)
 $regKey.SetAccessControl($regACL)
-Write-Host "Permissions modified for Administrators group."
-Write-Host "Registry key permissions successfully updated."
 $regKey.Close()
+Write-Host "Permissions modified for Administrators group."
+
+Write-Host "Registry key permissions successfully updated."
 
 Write-Host 'Deleting Application Compatibility Appraiser'
 reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{0600DD45-FAF2-4131-A006-0B17509B9F78}" /f | Out-Null
@@ -430,7 +426,7 @@ reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Sch
 Write-Host 'Deleting QueueReporting'
 reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{E3176A65-4E44-4ED3-AA73-3283660ACB9C}" /f | Out-Null
 
-Write-Host "Disabling Windows Defender"
+Write-Host 'Disabling Windows Defender'
 $servicePaths = @(
     "WinDefend",
     "WdNisSvc",
@@ -439,13 +435,12 @@ $servicePaths = @(
     "Sense"
 )
 foreach ($path in $servicePaths) {
-    # Set registry values for Windows Defender services
+    # Set registry values for Windows Defender services.
     Set-ItemProperty -Path "HKLM:\zSYSTEM\ControlSet001\Services\$path" -Name "Start" -Value 4
 }
 & 'reg' 'add' 'HKLM\zSOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer' '/v' 'SettingsPageVisibility' '/t' 'REG_SZ' '/d' 'hide:virus' '/f' | Out-Null
 
-Write-Host "Tweaking complete!"
-Write-Host "Unmounting Registry..."
+Write-Host "Tweaking complete! Unloading registry..."
 reg unload HKLM\zDEFAULT | Out-Null
 reg unload HKLM\zNTUSER | Out-Null
 reg unload HKLM\zSOFTWARE | Out-Null
@@ -468,12 +463,12 @@ Export-WindowsImage -SourceImagePath $ScratchDisk\tiny11\sources\install.wim -So
 
 Remove-Item -Path "$ScratchDisk\tiny11\sources\install.wim" -Force | Out-Null
 Rename-Item -Path "$ScratchDisk\tiny11\sources\install2.wim" -NewName "install.wim" | Out-Null
-Write-Host "Windows image completed. Continuing with boot.wim."
 
+Write-Host "Windows image completed. Continuing with boot.wim."
 Start-Sleep -Seconds 2
 Clear-Host
 
-Write-Host "Mounting boot image:"
+Write-Host "Mounting boot image"
 $wimFilePath = "$ScratchDisk\tiny11\sources\boot.wim" 
 & takeown "/F" $wimFilePath | Out-Null
 & icacls $wimFilePath "/grant" "$($adminGroup.Value):(F)"
@@ -485,7 +480,7 @@ reg load HKLM\zDEFAULT $ScratchDisk\scratchdir\Windows\System32\config\default
 reg load HKLM\zNTUSER $ScratchDisk\scratchdir\Users\Default\ntuser.dat
 reg load HKLM\zSYSTEM $ScratchDisk\scratchdir\Windows\System32\config\SYSTEM
 
-Write-Host "Bypassing system requirements(on the setup image):"
+Write-Host "Bypassing system requirements (on the setup image)"
 & 'reg' 'add' 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' '/v' 'SV1' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zDEFAULT\Control Panel\UnsupportedHardwareNotificationCache' '/v' 'SV2' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zNTUSER\Control Panel\UnsupportedHardwareNotificationCache' '/v' 'SV1' '/t' 'REG_DWORD' '/d' '0' '/f' | Out-Null
@@ -497,8 +492,7 @@ Write-Host "Bypassing system requirements(on the setup image):"
 & 'reg' 'add' 'HKLM\zSYSTEM\Setup\LabConfig' '/v' 'BypassTPMCheck' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 & 'reg' 'add' 'HKLM\zSYSTEM\Setup\MoSetup' '/v' 'AllowUpgradesWithUnsupportedTPMOrCPU' '/t' 'REG_DWORD' '/d' '1' '/f' | Out-Null
 
-Write-Host "Tweaking complete!"
-Write-Host "Unmounting Registry..."
+Write-Host "Tweaking complete! Unloading registry..."
 reg unload HKLM\zDEFAULT | Out-Null
 reg unload HKLM\zNTUSER | Out-Null
 reg unload HKLM\zSYSTEM | Out-Null
@@ -508,7 +502,7 @@ Dismount-WindowsImage -Path $ScratchDisk\scratchdir -Save
 
 Clear-Host
 
-Write-Host "The tiny11 image is now completed. Proceeding with the making of the ISO..."
+Write-Host "The Tiny11 image is now completed. Proceeding with the making of the ISO..."
 Write-Host "Copying unattended file for bypassing MS account on OOBE..."
 Copy-Item -Path "$PSScriptRoot\autounattend.xml" -Destination "$ScratchDisk\tiny11\autounattend.xml" -Force | Out-Null
 
@@ -543,14 +537,9 @@ if ([System.IO.Directory]::Exists($ADKDepTools)) {
 
 & "$OSCDIMG" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$ScratchDisk\tiny11\boot\etfsboot.com#pEF,e,b$ScratchDisk\tiny11\efi\microsoft\boot\efisys.bin" "$ScratchDisk\tiny11" "$PSScriptRoot\tiny11.iso"
 
-# Finishing up
-Write-Host "Creation completed! Press any key to exit the script..."
-Read-Host "Press Enter to continue"
-Write-Host "Performing Cleanup..."
+Read-Host "Creation completed! Press any key to exit the script"
+Write-Host "Performing cleanup..."
 Remove-Item -Path "$ScratchDisk\tiny11" -Recurse -Force | Out-Null
 Remove-Item -Path "$ScratchDisk\scratchdir" -Recurse -Force | Out-Null
-
-# Stop the transcript
 Stop-Transcript
-
 exit
