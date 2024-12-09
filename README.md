@@ -10,7 +10,7 @@ The only executable included is **oscdimg.exe**, which is provided in the Window
 Also included is an unattended answer file, which is used to bypass the Microsoft Account on OOBE and to deploy the image with the `/compact` flag.
 It's open-source, **so feel free to add or remove anything you want!** Feedback is also much appreciated.
 
-Instructions:
+# Instructions
 
 1. Download Windows 11 from the Microsoft website (<https://microsoft.com/software-download/windows11>)
 2. Mount the downloaded ISO image using Windows Explorer.
@@ -18,7 +18,7 @@ Instructions:
 4. Select the SKU that you want the image to be based on.
 5. When the image is completed, you'll see it in the folder where the script was extracted, with the name tiny11.iso
 
-# What is removed:
+# What is removed
 
 - Clipchamp
 - News
@@ -47,7 +47,7 @@ Instructions:
 
 **You have to update WinGet using the Microsoft Store before being able to install any apps with it!**
 
-# Known issues:
+# Known issues
 
 1. Although Edge is removed, there are some remnants in the Settings.
 You can install any browser using WinGet.
