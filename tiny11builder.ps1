@@ -77,6 +77,7 @@ if ((Test-Path "$DriveLetter\sources\boot.wim") -eq $false -or (Test-Path "$Driv
 
 Write-Host "Copying image"
 Copy-Item -Path "$DriveLetter\*" -Destination "$ScratchDisk\tiny11" -Recurse -Force | Out-Null
+
 Set-ItemProperty -Path "$ScratchDisk\tiny11\sources\install.esd" -Name IsReadOnly -Value $false
 Remove-Item "$ScratchDisk\tiny11\sources\install.esd" | Out-Null
 
@@ -391,16 +392,20 @@ function Enable-Privilege {
 
 Enable-Privilege SeTakeOwnershipPrivilege
 
-$regKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey("zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks",[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::TakeOwnership)
+$regKeyPath = "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks"
+
+# Change the owner to Administrators
+$regKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($regKeyPath, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, [System.Security.AccessControl.RegistryRights]::TakeOwnership)
 $regACL = $regKey.GetAccessControl()
 $regACL.SetOwner($adminGroup)
 $regKey.SetAccessControl($regACL)
 $regKey.Close()
 Write-Host "Owner changed to Administrators."
 
-$regKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey("zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks",[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ChangePermissions)
+# Modify permissions for Administrators group
+$regKey = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($regKeyPath, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, [System.Security.AccessControl.RegistryRights]::ChangePermissions)
 $regACL = $regKey.GetAccessControl()
-$regRule = New-Object System.Security.AccessControl.RegistryAccessRule ($adminGroup,"FullControl","ContainerInherit","None","Allow")
+$regRule = New-Object System.Security.AccessControl.RegistryAccessRule($adminGroup, "FullControl", "ContainerInherit", "None", "Allow")
 $regACL.SetAccessRule($regRule)
 $regKey.SetAccessControl($regACL)
 $regKey.Close()
@@ -409,22 +414,22 @@ Write-Host "Permissions modified for Administrators group."
 Write-Host "Registry key permissions successfully updated."
 
 Write-Host "Deleting Application Compatibility Appraiser"
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{0600DD45-FAF2-4131-A006-0B17509B9F78}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{0600DD45-FAF2-4131-A006-0B17509B9F78}" /f | Out-Null
 
 Write-Host "Deleting Customer Experience Improvement Program"
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{4738DE7A-BCC1-4E2D-B1B0-CADB044BFA81}" /f | Out-Null
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{6FAC31FA-4A85-4E64-BFD5-2154FF4594B3}" /f | Out-Null
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{FC931F16-B50A-472E-B061-B6F79A71EF59}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{4738DE7A-BCC1-4E2D-B1B0-CADB044BFA81}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{6FAC31FA-4A85-4E64-BFD5-2154FF4594B3}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{FC931F16-B50A-472E-B061-B6F79A71EF59}" /f | Out-Null
 
 Write-Host "Deleting Program Data Updater"
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{0671EB05-7D95-4153-A32B-1426B9FE61DB}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{0671EB05-7D95-4153-A32B-1426B9FE61DB}" /f | Out-Null
 
 Write-Host "Deleting autochk proxy"
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{87BF85F4-2CE1-4160-96EA-52F554AA28A2}" /f | Out-Null
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{8A9C643C-3D74-4099-B6BD-9C6D170898B1}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{87BF85F4-2CE1-4160-96EA-52F554AA28A2}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{8A9C643C-3D74-4099-B6BD-9C6D170898B1}" /f | Out-Null
 
 Write-Host "Deleting QueueReporting"
-reg delete "HKEY_LOCAL_MACHINE\zSOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tasks\{E3176A65-4E44-4ED3-AA73-3283660ACB9C}" /f | Out-Null
+reg delete "HKEY_LOCAL_MACHINE\$regKeyPath\{E3176A65-4E44-4ED3-AA73-3283660ACB9C}" /f | Out-Null
 
 Write-Host "Disabling Windows Defender"
 $servicePaths = @(
